@@ -53,19 +53,18 @@ def main():
     a = argparse.ArgumentParser()
     a.add_argument('--game-id', default='GSLE69',
                    help='game id (5 chars, default is GSLE69)')
-    a.add_argument('--game-name', default='SNESticle',
-                   help='short game name string (32 chars, default is SNESticle)')
+    a.add_argument('--game-name',
+                   help='short game name string (32 chars, default is ROM)')
     a.add_argument('--long-game-name',
-                   help=('long game name string (64 chars, '
-                         'default is SNESticle + ROM'))
+                   help=('long game name string (64 chars, default is SNESticle + ROM)'))
     a.add_argument('--developer', default='',
                    help='short developer string (32 chars)')
-    a.add_argument('--long-developer', default='',
-                   help='long developer string (64 chars)')
-    a.add_argument('--description', default='',
-                   help='game description (128 chars)')
-    a.add_argument('--header-game-name', default='SNESTICLE',
-                   help='game name in dvd header (default is SNESTICLE)')
+    a.add_argument('--long-developer',
+                   help='long developer string (64 chars, default is DEVELOPER)')
+    a.add_argument('--description',
+                   help='game description (128 chars, default is LONG_GAME_NAME)')
+    a.add_argument('--header-game-name',
+                   help='game name in dvd header (default is ROM)')
     a.add_argument('--banner',
                    help='custom banner image filename')
     a.add_argument('--rom',
@@ -112,18 +111,17 @@ def main():
                 target.write(x.to_bytes(1, 'big'))
             target.write(b'\0' * 0x5C0)
 
-            if args.long_game_name:
-                long_game_name = args.long_game_name
-            elif args.rom:
-                long_game_name = 'SNESticle ' + os.path.basename(args.rom)
-            else:
-                long_game_name = 'SNESticle Super Punch Out!!'
+            romname = os.path.basename(args.rom) if args.rom else 'Super Punch-Out!!'
+            game_name = args.game_name or romname
+            long_game_name = args.long_game_name or f'SNESticle {romname}'
+            description = args.description or long_game_name
+            long_developer = args.long_developer or args.developer
 
             # Write banner
             with io.BytesIO() as bannerstream:
                 if args.banner:
-                    if not a2bnr.a2bnr(bannerstream, args.banner, args.game_name, args.developer,
-                                       long_game_name, args.long_developer, args.description):
+                    if not a2bnr.a2bnr(bannerstream, args.banner, game_name, args.developer,
+                                       long_game_name, long_developer, description):
                         print(f'Error: Could not convert {args.banner} to a banner file.', file=sys.stderr)
                         sys.exit(1)
                     bannerstream.seek(0)
@@ -132,11 +130,11 @@ def main():
                     source.seek(0x4873b6cc)
                     bannerstream.write(source.read(0x1960))
                     bannerstream.seek(96*32*2 + 32)
-                    a2bnr.msg(args.game_name, 32, bannerstream, True)
+                    a2bnr.msg(game_name, 32, bannerstream, True)
                     a2bnr.msg(args.developer, 32, bannerstream, True)
                     a2bnr.msg(long_game_name, 64, bannerstream, True)
-                    a2bnr.msg(args.long_developer, 64, bannerstream, True)
-                    a2bnr.msg(args.description, 128, bannerstream, True)
+                    a2bnr.msg(long_developer, 64, bannerstream, True)
+                    a2bnr.msg(description, 128, bannerstream, True)
                     target.write(bannerstream.getvalue())
             target.write(b'\0' * 0x66a0)
 
@@ -149,9 +147,11 @@ def main():
                 target.seek(0)
                 target.write(args.game_id.encode('latin-1')[:6] + b'\0')
 
+            header_game_name = args.header_game_name or romname
+
             # Write game name
             target.seek(0x20)
-            hgn = args.header_game_name.encode('latin-1')
+            hgn = header_game_name.encode('latin-1')
             target.write(hgn + b'\0' * (0x3e0 - len(hgn)))
 
             # Write fst size to header
