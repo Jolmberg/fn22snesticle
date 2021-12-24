@@ -24,6 +24,7 @@ import argparse
 import io
 import os
 import os.path
+import pathlib
 import sys
 import a2bnr
 
@@ -48,32 +49,60 @@ patches = {0xdec74: [0x60000000],
            0x28b5f4: [0x61290040],
            0x28b618: [0x60000000]}
 
+idchars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
 
 def main():
     a = argparse.ArgumentParser()
-    a.add_argument('--game-id', default='GSLE69',
-                   help='game id (5 chars, default is GSLE69)')
+    a.add_argument('--game-id',
+                   help='game id (6 chars, default is to autogenerate)')
     a.add_argument('--game-name',
                    help='short game name string (32 chars, default is ROM)')
     a.add_argument('--long-game-name',
-                   help=('long game name string (64 chars, default is SNESticle + ROM)'))
+                   help=('long game name string (64 chars, default is "GAME_NAME (SNESticle)")'))
     a.add_argument('--developer', default='',
-                   help='short developer string (32 chars)')
+                   help='short developer string (32 chars, default is empty string)')
     a.add_argument('--long-developer',
                    help='long developer string (64 chars, default is DEVELOPER)')
     a.add_argument('--description',
                    help='game description (128 chars, default is LONG_GAME_NAME)')
     a.add_argument('--header-game-name',
-                   help='game name in dvd header (default is ROM)')
+                   help='game name in dvd header (992 chars, default is GAME_NAME)')
     a.add_argument('--banner',
                    help='custom banner image filename')
     a.add_argument('--rom',
-                   help='snes rom to include (default is Super Punch Out)')
+                   help='snes rom to include (default is Super Punch-Out!!)')
     a.add_argument('source', metavar='SOURCE',
                    help='source Fight Night 2 iso')
     a.add_argument('target', metavar='TARGET',
                    help='name of the iso file to build')
     args = a.parse_args()
+
+    if args.game_id:
+        game_id = args.game_id
+    else:
+        home = pathlib.Path.home()
+        conffile = os.path.join(home, '.fn22snesticle')
+        if not os.path.isfile(conffile):
+            chars = idchars[0] * 2
+            game_id = f'Z{chars}E69'
+        else:
+            with open(conffile, 'r') as f:
+                chars = f.read().strip()
+                if chars == idchars[-1] * len(chars):
+                    chars = idchars[0] * len(chars)
+                    game_id = f'Z{chars}E69'
+                    print(f'Warning: Game id wrapped around to {game_id}.')
+                else:
+                    numbers = [idchars.index(x) for x in chars]
+                    numbers[-1] += 1
+                    for x in reversed(range(len(numbers))):
+                        if numbers[x] >= len(idchars):
+                            numbers[x] = 0
+                            numbers[x - 1] += 1
+                    chars = ''.join(idchars[x] for x in numbers)
+                    game_id = f'Z{chars}E69'
+        print(f'Generated game id is {game_id}.')
 
     with open(args.source, 'rb') as source:
         with open(args.target, 'wb') as target:
@@ -113,7 +142,7 @@ def main():
 
             romname = os.path.basename(args.rom) if args.rom else 'Super Punch-Out!!'
             game_name = args.game_name or romname
-            long_game_name = args.long_game_name or f'SNESticle {romname}'
+            long_game_name = args.long_game_name or f'{game_name} (SNESticle)'
             description = args.description or long_game_name
             long_developer = args.long_developer or args.developer
 
@@ -143,11 +172,10 @@ def main():
             target.write(b'\0' * (0x8000 - (romlen & 0x7FFF)))
 
             # Write game id
-            if args.game_id:
-                target.seek(0)
-                target.write(args.game_id.encode('latin-1')[:6] + b'\0')
+            target.seek(0)
+            target.write(game_id.encode('latin-1')[:6] + b'\0')
 
-            header_game_name = args.header_game_name or romname
+            header_game_name = args.header_game_name or game_name or romname
 
             # Write game name
             target.seek(0x20)
@@ -158,6 +186,11 @@ def main():
             target.seek(0x428)
             data = 0x3b
             target.write(data.to_bytes(4, 'big') * 2)
+
+            # Update config file
+            if not args.game_id:
+                with open(conffile, 'w') as f:
+                    f.write(chars)
 
 
 if __name__ == '__main__':

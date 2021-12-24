@@ -1,6 +1,6 @@
 # fn22snesticle.py
 
-Scripts for producing a SNESticle ISO from a Fight Night Round 2 ISO and any
+A script for producing a SNESticle ISO from a Fight Night Round 2 ISO and any
 SNES ROM.
 
 ## Background
@@ -32,7 +32,7 @@ The simplest invocation would look something like this:
     ./fn22snesticle.py fightnight2.iso superpunchout.iso
 
 This will take SNESticle and the Super Punch-Out!! ROM directly from
-fightnight2.iso and use them to produce superpunchout.iso.
+fightnight2.iso and use them to produce the Gamecube ISO superpunchout.iso.
 
 More interestingly, you can use the --rom option to include a different SNES
 ROM:
@@ -50,10 +50,45 @@ work, but png is the only one that has been thoroughly tested.
 
     ./fn22snesticle.py --rom smw.sfc --banner snesticle.png fightnight2.iso smw.iso
 
-The rest of the options are for changing some of the string values that may or
-may not be visible in your loader.
+It's generally a good idea to also provide the full name of the SNES game using
+the --game-name option. It will be written to multiple fields inside the ISO that
+can be picked up by your loader. If no game name is provided, the ROM filename will
+be used instead.
 
-## The a2bnr.py utility
+## Game IDs
+
+There is generally no need to care about the game id option, just leave it out
+and hope for the best. But if you are curious, or if you think the game id is
+causing problems for the script or for your loader, read on.
+
+A game ID is a 6 digit code present on every Gamecube ISO, its structure is the
+following:
+
+ - A single letter identifying the console type (typically G for Gamecube).
+ - Two letters (or digits) identifying the game itself.
+ - One letter identifying the region of the game.
+ - Two digits (or letters) identifying the publisher.
+
+Fight Night Round 2 (the US version) has game ID GEYE69, where 69 is the
+publisher code for Electronic Arts, the E before that is for US region, the
+initial G is for Gamecube and EY is just the unique identifier for Fight Night 2
+(unique among Gamecube games published by Electronic Arts in the US that is).
+
+Some loaders will exhibit strange behaviour unless every available ISO has a
+unique game ID, therefore fn22snesticle.py will try to generate a unique ID for
+every successfully created ISO. The format used is "ZxxE69". E69 still means
+Electronic Arts and US, but to avoid collisions with existing games the first
+letter is set to Z. xx is a two character alphanumeric string, essentially a
+base 36 number that starts at 00 and increments by one for each generated
+ISO. So after 09 comes 0A and after 0Z comes 10. After ZZ (or 1296 generated
+ISOs) it prints a warning and wraps back to 00. The most recently used code is
+written to a file called .fn22snesticle in your home directory. If the file is
+deleted, game IDs start over at Z00E69.
+
+You can also freely choose your own game ID using the --game-id option. This
+will not affect the .fn22snesticle file.
+
+## a2bnr.py
 
 A banner is a 96x32 bitmap plus a couple of text strings describing the game. It
 shows up in the Gamecube OS, as well as in loaders like Swiss and in emulators
@@ -84,7 +119,7 @@ is optional. a2bnr.py will accept any image format that PIL can understand.
 
 SNESticle maps the Gamecube buttons to SNES buttons in a very literal way, ie A
 on the Gamecube controller becomes A on the SNES controller. This works for
-Super Punch Out but is useless for most games, so the script patches the code to
+Super Punch-Out but is useless for most games, so the script patches the code to
 map buttons based on physical location instead:
 
 | GC button | SNES button|
