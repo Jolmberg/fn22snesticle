@@ -21,6 +21,8 @@
 # superpunchout  0x56e58000
 
 import argparse
+import font
+import system_m8
 import io
 import os
 import os.path
@@ -50,6 +52,65 @@ patches = {0xdec74: [0x60000000],
            0x28b618: [0x60000000]}
 
 idchars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+
+def hline(banner, x, y, w, colour):
+    start = y * 96 + x
+    for a in range(start, start + w):
+        banner[a] = colour
+
+
+def vline(banner, x, y, h, colour):
+    start = y * 96 + x
+    for a in range(start, start + h * 96, 96):
+        banner[a] = colour
+
+
+def rect(banner, x, y, w, h, colour):
+    for b in range(y, y + h):
+        hline(banner, x, b, w, colour)
+
+
+def draw_text(banner, x, y, string, fgcolour, shadowcolour=None):
+    for (a, b) in font.pixels(system_m8.system_m8, string, basex=x, basey=y):
+        pos = 96 * b + a
+        if shadowcolour:
+            banner[pos + 97] = shadowcolour
+        banner[pos] = fgcolour
+
+
+def draw_text_box(banner, x, y, w, h, string, fgcolour, shadowcolour=None):
+    for (a, b) in font.pixels_box(system_m8.system_m8, string, x, y, w, h):
+        pos = 96 * b + a
+        if shadowcolour:
+            banner[pos + 97] = shadowcolour
+        banner[pos] = fgcolour
+
+
+def draw_banner(text, background=(11, 30, 163, 255)):
+    bordercolour = (118, 135, 246, 255)
+    barcolour = (23, 51, 246, 255)
+    lightgrey = (140, 140, 140, 255)
+    grey = (112, 112, 112, 255)
+    darkgrey = (84, 84, 84, 255)
+    brightwhite = (252, 252, 252, 255)
+    darkwhite = (192, 192, 192, 255)
+    black = (0, 0, 0, 255)
+    banner = [background] * 96 * 32
+    hline(banner, 0, 0, 96, bordercolour)
+    hline(banner, 0, 31, 96, bordercolour)
+    vline(banner, 0, 1, 30, bordercolour)
+    vline(banner, 95, 1, 30, bordercolour)
+    rect(banner, 1, 1, 94, 11, barcolour)  # (height 12 in NESticle)
+    rect(banner, 86, 3, 6, 6, grey)
+    hline(banner, 86, 2, 7, lightgrey)
+    vline(banner, 92, 3, 6, lightgrey)
+    vline(banner, 85, 2, 7, darkgrey)
+    hline(banner, 85, 9, 7, darkgrey)
+    hline(banner, 92, 9, 1, grey)
+    draw_text(banner, 6, 2, "SNESticle", brightwhite, black)
+    draw_text_box(banner, 6, 13, 88, 19, text, darkwhite, black)
+    return banner
 
 
 def main():
@@ -92,7 +153,7 @@ def main():
                 if chars == idchars[-1] * len(chars):
                     chars = idchars[0] * len(chars)
                     game_id = f'Z{chars}E69'
-                    print(f'Warning: Game id wrapped around to {game_id}.')
+                    print(f'Warning: Game id wrapped around to {game_id}.', file=sys.stderr)
                 else:
                     numbers = [idchars.index(x) for x in chars]
                     numbers[-1] += 1
@@ -149,22 +210,22 @@ def main():
             # Write banner
             with io.BytesIO() as bannerstream:
                 if args.banner:
-                    if not a2bnr.a2bnr(bannerstream, args.banner, game_name, args.developer,
-                                       long_game_name, long_developer, description):
-                        print(f'Error: Could not convert {args.banner} to a banner file.', file=sys.stderr)
-                        sys.exit(1)
-                    bannerstream.seek(0)
-                    target.write(bannerstream.read())
+                    kwargs = {'imagefile': args.banner}
                 else:
-                    source.seek(0x4873b6cc)
-                    bannerstream.write(source.read(0x1960))
-                    bannerstream.seek(96*32*2 + 32)
-                    a2bnr.msg(game_name, 32, bannerstream, True)
-                    a2bnr.msg(args.developer, 32, bannerstream, True)
-                    a2bnr.msg(long_game_name, 64, bannerstream, True)
-                    a2bnr.msg(long_developer, 64, bannerstream, True)
-                    a2bnr.msg(description, 128, bannerstream, True)
-                    target.write(bannerstream.getvalue())
+                    kwargs = {'rgbalist': draw_banner(game_name)}
+                if not a2bnr.a2bnr(bannerstream,
+                                   name=game_name,
+                                   developer=args.developer,
+                                   longname=long_game_name,
+                                   longdeveloper=long_developer,
+                                   description=description,
+                                   **kwargs):
+                    if args.banner:
+                        print(f'Error: Could not convert {args.banner} to a banner file.', file=sys.stderr)
+                    else:
+                        print('Error: Could not create banner.', file=sys.stderr)
+                    sys.exit(1)
+                target.write(bannerstream.getvalue())
             target.write(b'\0' * 0x66a0)
 
             # Write rom

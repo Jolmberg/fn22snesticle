@@ -18,7 +18,8 @@ issues and create a more logical button layout.
 
 ## Requirements
 
-fn22snesticle.py requires Python 3 and the pillow (PIL) module.
+fn22snesticle.py requires Python 3. Using custom banners requires the pillow
+(PIL) module, but this is strictly optional.
 
 ## Usage
 
@@ -42,18 +43,24 @@ ROM:
 This will produce an ISO containing SNESticle and the ROM smw.sfc (whatever that
 might mean).
 
-While you are at it, you probably want to replace the Fight Night 2 banner
-graphic that shows up next to the ISO in your loader. You can use the included
-snesticle.png for a minimalistic NESticle style logo, or you can go all out and
-create custom graphics for each SNES ROM. Pretty much any image format should
-work, but png is the only one that has been thoroughly tested.
-
-    ./fn22snesticle.py --rom smw.sfc --banner snesticle.png fightnight2.iso smw.iso
-
 It's generally a good idea to also provide the full name of the SNES game using
-the --game-name option. It will be written to multiple fields inside the ISO that
-can be picked up by your loader. If no game name is provided, the ROM filename will
-be used instead.
+the --game-name option:
+
+    ./fn22snesticle.py --rom smw.sfc --game-name "Swell Plumber Place" fightnight2.iso smw.iso
+
+It will be written to multiple fields inside the ISO that can be picked up by
+your loader. It will also be used to generate the banner image that shows up next
+to the game in most loaders.
+If no game name is provided, the ROM filename will be used instead.
+
+If you don't like the generated banners, you can provide your own, using
+the --banner option:
+
+    ./fn22snesticle.py fightnight2.iso superpunchout.iso --banner mybanner.png
+
+The image file should be 96 by 32 pixels. Most common image formats are
+supported, but something non-lossy, like png, is strongly recommended. The pillow
+(PIL) module is required in order for this to work.
 
 ## Game IDs
 
@@ -99,11 +106,10 @@ existing banner file. A typical invocation would look like this:
 
     ./a2bnr.py --image myimage.png mybanner.bnr
 
-This will convert myimage.png to the banner format and write it to
-mybanner.bnr. If mybanner.bnr already exists, this will only overwrite the
-bitmap portion of the file, leaving the text strings intact. Similarly, it is
-possible to replace just (a subset of) the text strings in an existing banner
-file:
+This will convert myimage.png to the banner format and write it to mybanner.bnr.
+If mybanner.bnr already exists, this will only overwrite the bitmap portion of
+the file, leaving the text strings intact. Similarly, it is possible to replace
+just (a subset of) the text strings in an existing banner file:
 
     ./a2bnr.py --game-name "My game" --developer "I made this" someoldbanner.bnr
 
@@ -111,7 +117,7 @@ This will overwrite the game name and developer fields of someoldbanner.bnr
 without touching the bitmap or the other text strings.
 
 When creating a new bnr file, the --image option is required but everything else
-is optional. a2bnr.py will accept any image format that PIL can understand.
+is optional. a2bnr.py will accept any image format that pillow can understand.
 
 ## SNESticle considerations
 
@@ -142,4 +148,3 @@ to support external chips like the DSP or Super FX.
 
 More information on this project can be found at
 https://www.update.uu.se/~johannes/snesticle/
-

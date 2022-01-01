@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
+import importlib
 import os
-import PIL
-import PIL.Image
 import sys
 
 
 def a2bnr(outfile,
           imagefile=None,
+          rgbalist=None,
           name=None,
           developer=None,
           longname=None,
@@ -21,36 +21,42 @@ def a2bnr(outfile,
         outfile.write('BNR1'.encode('latin-1'))
         outfile.write(b'\0' * 0x1C)
 
-    if imagefile is not None:
-        with PIL.Image.open(imagefile) as img:
-            img2 = img.convert('RGBA')
+    if imagefile or rgbalist:
+        if imagefile:
+            pi = importlib.import_module('PIL.Image')
+            with pi.open(imagefile) as img:
+                img2 = img.convert('RGBA')
             pixels = img2.getdata()
+        else:
+            pixels = rgbalist
 
-            width = 96
-            height = 32
+        width = 96
+        height = 32
 
-            if len(pixels) > width * height:
-                print('Warning: Too many pixels in source, result will probably not be great.', file=sys.stderr)
-            elif len(pixels) < width * height:
-                print('Error: Not enough pixels in source, aborting.', file=sys.stderr)
-                return False
+        if len(pixels) > width * height:
+            print('Warning: Too many pixels in source, result will probably not be great.', file=sys.stderr)
+        elif len(pixels) < width * height:
+            print('Error: Not enough pixels in source, aborting.', file=sys.stderr)
+            return False
 
-            for ty in range(0, height * width, 4 * width):
-                for tx in range(0, width, 4):
-                    for y in range(0, 4 * width, width):
-                        for x in range(4):
-                            p = pixels[ty + y + tx + x]
-                            r = p[0] >> 3
-                            g = p[1] >> 3
-                            b = p[2] >> 3
-                            if len(p) == 4:
-                                a = p[3] >> 7
-                            else:
-                                a = 1
-                            outpixels = (a << 15) | (r << 10) | (g << 5) | b
-                            outfile.write(outpixels.to_bytes(2, 'big'))
+        for ty in range(0, height * width, 4 * width):
+            for tx in range(0, width, 4):
+                for y in range(0, 4 * width, width):
+                    for x in range(4):
+                        p = pixels[ty + y + tx + x]
+                        r = p[0] >> 3
+                        g = p[1] >> 3
+                        b = p[2] >> 3
+                        if len(p) == 4:
+                            a = p[3] >> 7
+                        else:
+                            a = 1
+                        outpixels = (a << 15) | (r << 10) | (g << 5) | b
+                        outfile.write(outpixels.to_bytes(2, 'big'))
     elif patch:
         outfile.seek(0x1800, 1)
+    else:
+        return False
 
     msg(name, 32, outfile, patch)
     msg(developer, 32, outfile, patch)
