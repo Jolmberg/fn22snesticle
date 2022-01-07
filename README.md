@@ -147,4 +147,4 @@ to support external chips like the DSP or Super FX.
 ## Further reading
 
 More information on this project can be found at
-https://www.update.uu.se/~johannes/snesticle/
+https://dataswamp.org/~josk/snesticle/
