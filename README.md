@@ -1,7 +1,6 @@
 # fn22snesticle.py
 
-A script for producing a SNESticle ISO from a Fight Night Round 2 ISO and any
-SNES ROM.
+A script for producing a SNESticle ISO from a Fight Night Round 2 ISO.
 
 ## Background
 
@@ -35,41 +34,41 @@ The simplest (and most boring) invocation would look something like this:
     ./fn22snesticle.py fightnight2.iso superpunchout.iso
 
 This will take SNESticle and the Super Punch-Out ROM directly from
-fightnight2.iso and use them to produce the Gamecube ISO superpunchout.iso.
+`fightnight2.iso` and use them to produce the Gamecube ISO `superpunchout.iso`.
 
-More interestingly, you can use the --rom option to include other SNES ROMs. You
+More interestingly, you can use the `--rom` option to include other SNES ROMs. You
 can specify a single ROM file or a directory containing multiple ROMs.
 
     ./fn22snesticle.py --rom smw.sfc fightnight2.iso smw.iso
 
-This will produce an ISO containing SNESticle and the ROM smw.sfc (whatever that
+This will produce an ISO containing SNESticle and the ROM `smw.sfc` (whatever that
 might mean). It will launch right into the game when loaded.
 
     ./fn22snesticle.py --rom myromz fightnight2.iso snesticle.iso
 
 This will produce an ISO containing all the SNES ROMs found in the `myromz`
 directory. More specifically, it will include at most 506 files with the
-extensions sfc, smc, and fig. The produced ISO will load into a ROM selection
-screen.
+extensions sfc, smc, or fig (case insensitive). The produced ISO will load into
+a ROM selection screen.
 
 For a single-ROM ISO, it's generally a good idea to also provide the full name
-of the SNES game using the --game-name option:
+of the SNES game using the `--game-name` option:
 
     ./fn22snesticle.py --rom smw.sfc --game-name "Swell Plumber Place" fightnight2.iso smw.iso
 
-It will be written to multiple fields inside the ISO, that can be picked up by
-your loader. It will also be used to generate the banner image that shows up
-next to the game in most loaders. If no game name is provided, the ROM filename
-will be used instead. For multi-ROM ISOs, the game name will default to
+The game name will be written to multiple fields inside the ISO, that can be
+picked up by your loader. It will also be used to generate the banner image that
+shows up next to the game in most loaders. If no game name is provided, the ROM
+filename will be used instead. For multi-ROM ISOs, the game name will default to
 `SNESticle` instead.
 
 When producing a multi-ROM ISO, the script will out of courtesy include Super
 Punch-Out on the SNESticle ISO, by copying it from the Fight Night ISO. If you
 really, really dislike Super Punch-Out, you can use the option
---no-super-punch-out to leave it out.
+`--no-super-punch-out` to leave it out.
 
 If you don't like the generated banners, you can provide your own, using
-the --banner option:
+the `--banner` option:
 
     ./fn22snesticle.py fightnight2.iso superpunchout.iso --banner mybanner.png
 
@@ -78,8 +77,8 @@ supported, but something non-lossy, like png, is strongly recommended. The
 pillow (PIL) module is required in order for this to work.
 
 By default, the script patches the joypad emulation of SNESticle to remap some
-buttons (see the Joypad emulation section). This is usually preferable to the
-default mapping, but you can disable this patch with the --literal-buttons
+buttons (see the Controller emulation section). This is usually preferable to
+the default mapping, but you can disable this patch with the `--literal-buttons`
 option if you like.
 
 ## Game IDs
@@ -88,8 +87,8 @@ There is generally no need to care about the game id option, just leave it out
 and hope for the best. But if you are curious, or if you think the game id is
 causing problems for the script or for your loader, read on.
 
-A game ID is a 6 digit code present on every Gamecube ISO, its structure is the
-following:
+A game ID is a six character code present on every Gamecube ISO, its structure
+is the following:
 
  - A single letter identifying the console type (typically G for Gamecube).
  - Two letters (or digits) identifying the game itself.
@@ -109,11 +108,11 @@ first letter is set to Z. xx is a two character alphanumeric string, essentially
 a base 36 number that starts at 00 and increments by one for each generated
 ISO. So after 09 comes 0A and after 0Z comes 10. After ZZ (or 1296 generated
 ISOs) it prints a warning and wraps back to 00. The most recently used code is
-written to a file called .fn22snesticle in your home directory. If the file is
+written to a file called `.fn22snesticle` in your home directory. If the file is
 deleted, game IDs start over at Z00E69.
 
-You can also freely choose your own game ID using the --game-id option. This
-will not affect the .fn22snesticle file.
+You can also freely choose your own game ID using the `--game-id` option. This
+will not affect the `.fn22snesticle` file.
 
 ## a2bnr.py
 
@@ -126,18 +125,20 @@ existing banner file. A typical invocation would look like this:
 
     ./a2bnr.py --image myimage.png mybanner.bnr
 
-This will convert myimage.png to the banner format and write it to mybanner.bnr.
-If mybanner.bnr already exists, this will only overwrite the bitmap portion of
-the file, leaving the text strings intact. Similarly, it is possible to replace
-just (a subset of) the text strings in an existing banner file:
+This will convert `myimage.png` to the banner format and write it to
+`mybanner.bnr`. If mybanner.bnr already exists, this will only overwrite the
+bitmap portion of the file, leaving the text strings intact. Similarly, it is
+possible to replace just (a subset of) the text strings in an existing banner
+file:
 
     ./a2bnr.py --game-name "My game" --developer "I made this" someoldbanner.bnr
 
-This will overwrite the game name and developer fields of someoldbanner.bnr
+This will overwrite the game name and developer fields of `someoldbanner.bnr`
 without touching the bitmap or the other text strings.
 
-When creating a new bnr file, the --image option is required but everything else
-is optional. a2bnr.py will accept any image format that pillow can understand.
+When creating a new bnr file, the `--image` option is required but everything
+else is optional. a2bnr.py will accept any image format that pillow can
+understand.
 
 ## Running SNESticle
 
@@ -147,12 +148,14 @@ The ROM selection screen should be fairly self-explanatory. Choose a ROM by
 moving the arrow up and down, then press A or Start to run it. You can return
 to the ROM selection screen by resetting your Gamecube.
 
-### Joypad emulation
+### Controller emulation
+
+Only controller 1 is supported for now.
 
 SNESticle within Fight Night maps the Gamecube buttons to SNES buttons in a very
 literal way, ie A on the Gamecube controller becomes A on the SNES controller.
 This works for Super Punch-Out but is useless for most games, so unless the
---literal-buttons flag is given, the script patches the code to map buttons
+`--literal-buttons` flag is given, the script patches the code to map buttons
 based on physical locations instead:
 
 | GC button | SNES button |
@@ -165,12 +168,14 @@ based on physical locations instead:
 | Z         | Select      |
 
 
-### Compatibility etc
+### Compatibility
 
-At the time of writing, little is known about the features or accuracy of
-SNESticle. It happily accepts standard SNES ROMS with or without the header (ie
-SMC or SFC files) and it runs a lot of games with no trouble. It does not seem
-to support external chips like the DSP or Super FX.
+Only NTSC ROMs are supported. Compatibility is generally good, with minor
+glitches in some games, and there seems to be no support for external chips like
+the DSP or Super FX (ie, no Mario Kart, and no Star Fox). Games that do not work
+at all (and files that are not even SNES ROMs) will typically crash the emulator.
+When that happens, there is no other recourse than turning your Gamecube off and
+on again.
 
 ## Further reading
 
