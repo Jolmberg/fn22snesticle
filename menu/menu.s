@@ -18,7 +18,6 @@
 
 .segment "ZEROPAGE"
 
-
 temp1: .res 2
 temp2: .res 2
 temp3: .res 2
@@ -28,9 +27,17 @@ temp6: .res 2
 temp7: .res 2
 temp8: .res 2
 
+chosen: .res 4
+controllers: .res 4
+
 cgame: .res 2
+csetting: .res 2
 cy: .res 1
-btn: .res 2
+cy_games: .res 1
+cy_settings: .res 1
+btn: .res 1
+btn_new: .res 1
+btn_active: .res 1
 btn_cooldown: .res 1
 col_ind:
 col_r_ind: .res 1
@@ -47,10 +54,14 @@ col_b_val: .res 1
 dummy: .res 1
 newcol: .res 2
 dummy2: .res 2
-chosen: .res 4
 page: .res 2
 strobe1: .res 2
 strobe2: .res 2
+transition: .res 1
+scroll_x: .res 2
+copysrc: .res 2
+copydest: .res 2
+screen_base: .res 2
 .segment "BSS"
 spritesinram: .res 512
 starxy: .res 512
@@ -126,7 +137,7 @@ reset:
     stz $2129
     stz $212A
     stz $212B
-    sta $212C
+    stz $212C
     stz $212D
     stz $212E
     stz $212F
@@ -162,9 +173,9 @@ reset:
     ldy #bgdata                 ; Source address
     sty $4302
     stz $4304                   ; Source bank is 0
-    lda #$50                    ; Size
+    lda #$80                    ; Size
     sta $4305
-    lda #9
+    lda #$D
     sta $4306
     lda #1
     sta $420b
@@ -181,7 +192,7 @@ reset:
     sty $4305
     lda #1
     sta $420b
-    
+
     ldy #sprpalette
     sty $4302
     ldy #256
@@ -204,33 +215,34 @@ reset:
     ldx #$5c0
     jsr copyscreen
 
-    ;; Blank lines
-    lda #0
-    ldy #empty
-    sty $0
+    ;; Blank lines (including second screen)
     ldy #$2360
-    ldx #$40
-    jsr copyscreen
+    sty $2116
+    lda #9                      ; word, fixed
+    sta $4300
+    lda #$18
+    sta $4301
+    ldy #empty
+    sty $4302
     lda #0
-    ldy #$2380
-    jsr copyscreen
+    sta $4304
+    ldx #$940
+    stx $4305
+    lda #1
+    sta $420b
+
     lda #0
-    ldy #$23A0
-    jsr copyscreen
-    lda #0
-    ldy #$23C0
-    jsr copyscreen
-    lda #0
-    ldy #$23E0
+    ldy #settings_title
+    sty $0
+    ldy #$2400
+    ldx #$200
     jsr copyscreen
 
     lda #0
     sta $2105                   ; mode 0
     stz $210b                   ; BG1,2 tiledata offset (0)
-    lda #$20
+    lda #$21
     sta $2107                   ; BG1 tilemap offset ($4000)
-    lda #1
-    sta $212c                   ; Activate bg1
 
     ;; Reset sprites
     ldx #$1f8
@@ -274,11 +286,11 @@ reset:
     lda #1
     sta $420b
 
-    lda #4                      ; arrow x position
+    lda #6                      ; arrow x position
     sta spritesinram + 508
     lda #$20                    ; arrow y position
     sta spritesinram + 509
-    lda #$39                    ; arrow tile
+    lda #$59                    ; arrow tile
     sta spritesinram + 510
     lda #%00100000              ; arrow palette
     sta spritesinram + 511
@@ -294,7 +306,6 @@ reset:
     sta starxy, x
     lda $8200, x
     ora #$0100
-    ;; and #$3fff
     sta starspdxy, x
     stz starspdxy + 2, x
     lda #$F800
@@ -321,13 +332,19 @@ reset:
     lda #171
     sta col_b_ind
     
-    lda #$0f                    ; Maximum screen brightness
-    sta $2100
 
     stz cgame                   ; Game number
     stz cgame + 1
+    stz csetting
+    stz csetting + 1
     lda #4
-    sta cy
+    sta cy_games
+    sta cy_settings
+    lda #1
+    sta controllers
+    sta controllers + 1
+    sta controllers + 2
+    sta controllers + 3
     ldy #$8000
     sty page
 
@@ -343,86 +360,244 @@ reset:
     sty starcount
 
     jsr movestars
+    lda #$0f                    ; Maximum screen brightness
+    sta $2100
+
     lda #$81
     sta $4200
+    ldx #0
+    stx scroll_x
+    lda #0
+    sta transition
+    ldx #$2000
+    stx screen_base
     jmp wait_for_vblank
+
 mainloop:
     jsr colourcycle
     jsr movestars
-    
+    jsr update_scroll
+    lda transition
+    bit #1
+    beq check_buttons
+    jmp wait_for_vblank
+
+check_buttons:
     lda $4219
-    and #$c                    ; Check for up and down only
+    and #$af                    ; Check for directions, select, and B
     bne direction_pressed
     lda #0
     sta btn
     sta btn_cooldown
     jmp wait_for_vblank
 
-direction_pressed:  
-    bit btn
-    beq new_btn
-    lda btn_cooldown
+direction_pressed:
+    sta btn_new
+    eor btn
+    and btn_new
+    bne new_btn
+    lda btn
+    and btn_new
+    sta btn
+    lda btn_new
+    and btn_active
+    bne :+
+    sta btn
+    jmp wait_for_vblank
+:   lda btn_cooldown
     dec
     sta btn_cooldown
-    bne wait_for_vblank
+    beq :+
+    jmp wait_for_vblank
+:
     lda #6
     sta btn_cooldown
-    bpl handle_btn
+    bpl handle_btn              ; Always taken
 
 new_btn:
-    sta btn
+    sta btn_active
     lda #30
     sta btn_cooldown
-    bpl handle_btn
+    lda btn_new
+    sta btn
 
 handle_btn:
-    lda btn
+    lda btn_active
+    bit #$20
+    beq :+
+    jmp handle_btn_select
+:
+    bit #8
+    beq :+
+    jmp handle_btn_up
+:
     bit #4
-    beq handle_btn_up
-    ldy cgame                   ; It's down
-    cpy maxgame
-    beq wait_for_vblank
-    iny
-    sty cgame
-    lda cy
-    inc
-    cmp #27
-    bne update_chosen
+    beq :+
+    jmp handle_btn_down
+:
+    bit #2
+    bne handle_btn_left
+    bit #1
+    bne handle_btn_right
+    bit #$80
+    beq :+
+    jmp handle_btn_b
+:
+
+handle_btn_right:
+    lda transition
+    beq handle_btn_right_main
+    jmp wait_for_vblank
+handle_btn_right_main:
     rep #$20
 .a16
-    lda page
+    lda cgame
     clc
-    adc #$5c0
-    sta page
-    lda #4
+    adc #23
+    cmp maxgame
+    beq :+
+    bpl :++
+:
+    sta cgame
+    jsr nextpage
+:
+    lda #0
     sep #$20
 .a8
-    jmp update_chosen
+    jmp wait_for_vblank
+handle_btn_left:
+    lda transition
+    beq handle_btn_left_main
+    jmp wait_for_vblank
+handle_btn_left_main:
+    rep #$20
+.a16
+    lda cgame
+    sec
+    sbc #23
+    bmi :+
+    sta cgame
+    jsr prevpage
+:
+    lda #0
+    sep #$20
+.a8
+    jmp wait_for_vblank
+
 handle_btn_up:
+    lda transition
+    beq handle_btn_up_main
+handle_btn_up_settings:
+    ldy csetting
+    bne :+
+    jmp wait_for_vblank
+:
+    dey
+    sty csetting
+    lda cy_settings
+    dec
+    sta cy_settings
+    jmp update_chosen
+
+handle_btn_up_main:
     ldy cgame
-    beq wait_for_vblank
+    bne :+
+    jmp wait_for_vblank
+:
     dey
     sty cgame
-    lda cy
+    lda cy_games
     dec
     cmp #3
-    bne update_chosen
+    beq :+
+    sta cy_games
+    jmp update_chosen
+:
     rep #$20
 .a16
-    lda page
-    sec
-    sbc #$5c0
-    sta page
-    lda #26
+    jsr prevpage
     sep #$20
 .a8
+    sta cy_games
+    jmp update_chosen
+handle_btn_down:
+    lda transition
+    beq handle_btn_down_main
+handle_btn_down_settings:
+    ldy csetting
+    cpy #3
+    bne :+
+    jmp wait_for_vblank
+:
+    iny
+    sty csetting
+    lda cy_settings
+    inc
+    sta cy_settings
+    jmp update_chosen
+
+handle_btn_down_main:
+    ldy cgame                   ; It's down
+    cpy maxgame
+    bne :+
+    jmp wait_for_vblank
+:
+    iny
+    sty cgame
+    lda cy_games
+    inc
+    cmp #27
+    beq :+
+    sta cy_games
+    jmp update_chosen
+:
+    rep #$20
+.a16
+    jsr nextpage
+    sep #$20
+.a8
+    sta cy_games
+    jmp update_chosen
+
+handle_btn_select:
+    lda transition
+    inc
+    and #3
+    sta transition
+    ldx scroll_x
+    dec a
+    bne :+
+    ldx #4
+    bra :++
+:   eor #2
+    bne :++
+    ldx #$fc
+:   stx scroll_x
+:   lda screen_base + 1
+    eor #$4
+    sta screen_base + 1
+    jmp wait_for_vblank
+
+handle_btn_b:
+    lda transition
+    eor #2
+    bne wait_for_vblank
+    ldx csetting
+    lda controllers, x
+    inc a
+    cmp #3
+    bne :+
+    lda #0
+:
+    sta controllers, x
+    jmp wait_for_vblank
+
 update_chosen:
-    sta cy
     asl a
     asl a
     asl a
     sta spritesinram + 509      ; Move arrow
-    tya
+    lda cgame
     asl a
     asl a
     tay
@@ -437,6 +612,24 @@ update_chosen:
 wait_for_vblank:
     wai
     jmp mainloop
+
+.a16
+nextpage:
+    lda page
+    clc
+    adc #$5c0
+    sta page
+    lda #4
+    rts
+
+prevpage:
+    lda page
+    sec
+    sbc #$5c0
+    sta page
+    lda #26
+    rts
+.a8
 
 ;; A = source bank, $0 = source offset, Y = destination, X = size
 copyscreen:
@@ -481,11 +674,11 @@ colourcycle_ok:
     lsr a
     lsr a
     lsr a
-    sta $0
+    sta temp1
     lda col_b_val
     asl a
     asl a
-    ora $0
+    ora temp1
     sta newcol + 1
     tya
     asl a
@@ -495,6 +688,44 @@ colourcycle_ok:
     asl a
     ora col_r_val
     sta newcol
+    rts
+
+update_scroll:
+    lda transition
+    bit #1
+    beq end_scroll
+    ldx scroll_x
+    bit #2
+    beq scroll_right
+scroll_left:
+    dex
+    dex
+    dex
+    dex
+    dex
+    dex
+    stx scroll_x
+    lda scroll_x
+    bne end_scroll
+    beq end_transition
+scroll_right:
+    inx
+    inx
+    inx
+    inx
+    inx
+    inx
+    stx scroll_x
+    lda scroll_x
+    bne end_scroll
+
+end_transition:
+    lda transition
+    inc a
+    and #3
+    sta transition
+
+end_scroll:
     rts
 
 movestars:
@@ -517,9 +748,9 @@ movestars:
     xba
     pha
     ;; Go faster
-    sta $2
+    sta temp2
     clc
-    adc $2
+    adc temp2
     clc
     adc starspdxy, x
     bvs @toobig
@@ -527,12 +758,12 @@ movestars:
 @toobig:
     pla
     ;; Go faster
-    sta $2
+    sta temp2
     clc
-    adc $2
+    adc temp2
     clc
     adc starxy, x
-    sta $0
+    sta temp1
     eor starxy, x
     bpl @onscreen
     ;; Reset this star
@@ -546,7 +777,7 @@ movestars:
     tax
 
 @onscreen:
-    lda $0
+    lda temp1
     sta starxy, x
     xba
     sep #$20
@@ -578,39 +809,39 @@ movestars:
     and #$fe
     tax
     lda sin, x
-    sta $0
+    sta temp1
     lda cos, x
-    sta $2
+    sta temp2
     pla
     tax
 
     ;; Reset this star
-    lda $0                      ; sin
+    lda temp1                   ; sin
     sta starspdxy + 2, y
     ;; Randomize
     bit strobe1
     bmi @flobb
     clc
-    adc $0                      ; sin
+    adc temp1                   ; sin
     bit strobe2
     bmi @flobb
     clc
-    adc $0                      ; sin
+    adc temp1                   ; sin
 @flobb:
     clc
     adc #$8000
     sta starxy + 2, y
-    lda $2                      ; cos
+    lda temp2                   ; cos
     sta starspdxy, y
     ;; Randomize
     bit strobe1
     bmi @flobb2
     clc
-    adc $2                      ; cos
+    adc temp2                   ; cos
     bit strobe2
     bmi @flobb2
     clc
-    adc $2                      ; cos
+    adc temp2                   ; cos
 @flobb2:
     clc
     adc #$8000
@@ -626,7 +857,7 @@ movestars:
 .a8
     xba
     clc
-    adc #$3a
+    adc #$5a
     sta spritesinram + 2, y
     rep #$20
 .a16
@@ -653,8 +884,50 @@ movestars:
 .a8
     rts
 
+copy_controller_settings:
+    rep #$20
+.a16
+    lda controllers, x
+    and #$ff
+    asl a
+    asl a
+    asl a
+    asl a
+    clc
+    adc #controller_off
+    sta temp1
+    lda #0
+    txa
+    asl a
+    asl a
+    asl a
+    asl a
+    asl a
+    clc
+    adc #$2490
+    tay
+    lda #16
+    tax
+    lda #0
+    sep #$20
+    jsr copyscreen
+.a8
+    rts
 
 vblank:
+    lda transition
+    and #2
+    beq :+
+    lda cy_settings
+    bne :++
+:
+    lda cy_games
+:
+    sta cy
+    lda scroll_x
+    sta $210D
+    lda scroll_x + 1
+    sta $210D
     ;; Toggle strobe
     lda strobe2 + 1
     eor #$80
@@ -666,11 +939,16 @@ vblank:
     sta starcount
 @enoughstars:
     ;; Update arrow position
-    lda cy
+    lda transition
+    and #1
+    beq :+
+    lda #$f0
+    bra :++
+:   lda cy
     asl a
     asl a
     asl a
-    sta spritesinram + 509
+:   sta spritesinram + 509
 
     ;; DMA all 128 sprites
     stz $2102
@@ -686,15 +964,38 @@ vblank:
     sta $420b
     sta $4300
 
-    ;; Copy screen
+    lda transition
+    and #2
+    beq copy_game_list
+copy_settings:
+    lda #0
+    ldy #settings
+    sty temp1
+    ldy #$2480
+    ldx #$100
+    jsr copyscreen
+
+    ldx #0
+    jsr copy_controller_settings
+    ldx #1
+    jsr copy_controller_settings
+    ldx #2
+    jsr copy_controller_settings
+    ldx #3
+    jsr copy_controller_settings
+    jmp no_copy_needed
+copy_game_list:
     lda #1
     ldy page
-    sty $0
+    sty temp1
     ldy #$2080
     ldx #$5c0
     jsr copyscreen
-
+no_copy_needed:
     ;; Highlight selected
+    lda transition
+    and #1
+    bne no_highlight
     lda cy
     xba
     rep #$20
@@ -703,7 +1004,7 @@ vblank:
     lsr a
     lsr a
     clc
-    adc #$2001
+    adc screen_base
     tay
     lda #0
     sep #$20
@@ -718,6 +1019,7 @@ vblank:
     dex
     bne :-
 
+no_highlight:
     ;; Update palettes
     lda #$8f                    ; Last entry of sprite palette 0
     sta $2121                   ; $2121 cgram address
@@ -767,14 +1069,32 @@ sin:
 cos:
     .include "cos.inc"
 title:
-    .byte 0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8
-    .byte 0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8,0,8
-    .byte $0,8,$1,8,$2,8,$3,8,$4,8,$5,8,$6,8,$7,8,$8,8,$9,8,$a,8,$b,8,$c,8,$d,8,$e,8,$f,8,$10,8,$11,8,$12,8,$13,8,$14,8,$15,8,$16,8,$17,8,$18,8,$19,8,$1a,8,$1b,8,$1c,8,$1d,8,$1e,8,$1f,8,$20,8,$21,8,$22,8,$23,8,$24,8,$25,8,$26,8,$27,8,$28,8,$29,8,$2a,8,$2b,8,$2c,8,$2d,8,$2e,8,$2f,8,$30,8,$31,8,$32,8,$33,8,$34,8,$35,8,$36,8,$37,8,$38,8,$39,8,$3a,8,$3b,8,$3c,8,$3d,8,$3e,8,$3f,8
-    .byte $94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8
-    .byte $94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8,$94,8
+    .byte $20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8
+    .byte $20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8
+    .byte $20,8,$1,8,$2,8,$3,8,$4,8,$5,8,$6,8,$7,8,$8,8,$9,8,$a,8,$b,8,$c,8,$d,8,$e,8,$f,8,$10,8,$11,8,$12,8,$13,8,$14,8,$15,8,$16,8,$17,8,$18,8,$19,8,$1a,8,$1b,8,$1c,8,$1d,8,$1e,8,$1f,8,$20,8,$21,8,$22,8,$23,8,$24,8,$25,8,$26,8,$27,8,$28,8,$29,8,$2a,8,$2b,8,$2c,8,$2d,8,$2e,8,$2f,8,$30,8,$31,8,$32,8,$33,8,$34,8,$35,8,$36,8,$37,8,$38,8,$39,8,$3a,8,$3b,8,$3f,8,$d5,8,$d6,8,$3e,8
+    .byte $D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8
+    .byte $D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8
 empty:
-    .byte $70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0
-    .byte $70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0,$70,0
+    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+settings_title:
+    .byte $20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8
+    .byte $20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8,$20,8
+    .byte $40,8,$41,8,$42,8,$43,8,$44,8,$45,8,$46,8,$47,8,$48,8,$49,8,$4a,8,$4b,8,$4c,8,$4d,8,$4e,8,$4f,8,$50,8,$51,8,$52,8,$53,8,$54,8,$55,8,$56,8,$57,8,$58,8,$59,8,$5a,8,$5b,8,$5c,8,$5d,8,$5e,8,$5f,8
+    .byte $60,8,$d7,8,$d5,8,$63,8,$64,8,$65,8,$66,8,$67,8,$68,8,$69,8,$6a,8,$6b,8,$6c,8,$6d,8,$6e,8,$6f,8,$70,8,$71,8,$72,8,$73,8,$74,8,$75,8,$76,8,$77,8,$78,8,$79,8,$7a,8,$7b,8,$7c,8,$7d,8,$7e,8,$7f,8
+    .byte $D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8
+    .byte $D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8,$D4,8
+settings:
+    .word 0,0,$8c,$98,$97,$9d,$9b,$98,$95,$95,$8e,$9b,0,$81,$a9,0,$9c,$8e,$97,$9c,$92,$8b,$95,$8e,0,0,0,0,0,0,0,0
+    .word 0,0,$8c,$98,$97,$9d,$9b,$98,$95,$95,$8e,$9b,0,$82,$a9,0,$9c,$8e,$97,$9c,$92,$8b,$95,$8e,0,0,0,0,0,0,0,0
+    .word 0,0,$8c,$98,$97,$9d,$9b,$98,$95,$95,$8e,$9b,0,$83,$a9,0,$9c,$8e,$97,$9c,$92,$8b,$95,$8e,0,0,0,0,0,0,0,0
+    .word 0,0,$8c,$98,$97,$9d,$9b,$98,$95,$95,$8e,$9b,0,$84,$a9,0,$9c,$8e,$97,$9c,$92,$8b,$95,$8e,0,0,0,0,0,0,0,0
+controller_off:
+    .word $98,$8f,$8f,0,0,0,0,0
+controller_sensible:
+    .word $9c,$8e,$97,$9c,$92,$8b,$95,$8e
+controller_literal:
+    .word $95,$92,$9d,$8e,$9b,$8a,$95,0
 .segment "BG"
 bgdata:
 .segment "FONT"
@@ -783,6 +1103,7 @@ font:
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 sprites:
+sprite_arrow:
     .byte %00001000,%00001000
     .byte %00001100,%00001100
     .byte %11111110,%11111110
@@ -799,6 +1120,7 @@ sprites:
     .byte %00001100,%00001100
     .byte %00001000,%00001000
     .byte %00000000,%00000000
+sprite_star:
     .byte   0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .byte $80,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .byte   0,$80,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  0,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -815,7 +1137,35 @@ sprites:
     .byte $80,  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,$80,$80,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .byte   0,$80,0,0,0,0,0,0,0,0,0,0,0,0,0,0,$80,$80,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     .byte $80,$80,0,0,0,0,0,0,0,0,0,0,0,0,0,0,$80,$80,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+top_bar:
     .byte $ff,0,$ff,0,0,0,0,0,0,0,0,0,0,0,0,0
+button_z:
+    .word $7cff
+    .word $82ff
+    .word $f2ff
+    .word $e6ff
+    .word $ceff
+    .word $9eff
+    .word $82ff
+    .word $7cff
+pointer_right:
+    .word $00ff
+    .word $00ff
+    .word $60ff
+    .word $30ff
+    .word $18ff
+    .word $30ff
+    .word $60ff
+    .word $00ff
+pointer_left:
+    .word $00ff
+    .word $00ff
+    .word $0cff
+    .word $18ff
+    .word $30ff
+    .word $18ff
+    .word $0cff
+    .word $00ff
 zero: .byte 0
 .segment "MAXGAME"
 maxgame:
@@ -830,52 +1180,52 @@ filenames:
 
 .segment "BANK1"
 games:
-    .word $70,$70,$4a,$70,$50,$4a,$56,$4e,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$4a,$55,$5c,$58,$70,$4a,$70,$50,$4a,$56,$4e,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$4a,$57,$58,$5d,$51,$4e,$5b,$70,$50,$4a,$56,$4e,$6a,$6a
-    .word $6a,$6a,$6a,$6a,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$52,$5d,$65,$5c,$70,$4a,$70,$50,$4a,$56,$4e,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$5b,$4e,$4a,$55,$55,$62,$70,$4c,$58,$58,$55,$70,$50,$4a
-    .word $56,$4e,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
-    .word $70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70,$70
+    .word $00,$00,$4a,$00,$50,$4a,$56,$4e,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$4a,$55,$5c,$58,$00,$4a,$00,$50,$4a,$56,$4e,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$4a,$57,$58,$5d,$51,$4e,$5b,$00,$50,$4a,$56,$4e,$6a,$6a
+    .word $6a,$6a,$6a,$6a,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$52,$5d,$65,$5c,$00,$4a,$00,$50,$4a,$56,$4e,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$5b,$4e,$4a,$55,$55,$62,$00,$4c,$58,$58,$55,$00,$50,$4a
+    .word $56,$4e,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
+    .word $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
     .byte "this is bank1"

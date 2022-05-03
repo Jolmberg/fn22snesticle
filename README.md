@@ -60,7 +60,7 @@ The game name will be written to multiple fields inside the ISO, that can be
 picked up by your loader. It will also be used to generate the banner image that
 shows up next to the game in most loaders. If no game name is provided, the ROM
 filename will be used instead. For multi-ROM ISOs, the game name will default to
-`SNESticle` instead.
+`SNESticle`.
 
 When producing a multi-ROM ISO, the script will out of courtesy include Super
 Punch-Out on the SNESticle ISO, by copying it from the Fight Night ISO. If you
@@ -77,9 +77,20 @@ supported, but something non-lossy, like png, is strongly recommended. The
 pillow (PIL) module is required in order for this to work.
 
 By default, the script patches the joypad emulation of SNESticle to remap some
-buttons (see the Controller emulation section). This is usually preferable to
-the default mapping, but you can disable this patch with the `--literal-buttons`
-option if you like.
+buttons (see the Controller emulation section). On a multi-ROM ISO, button
+mapping can be configured from the ROM selection screen, but on single-ROM ISOs
+the button mapping must be configured on the command line using the `--p1`,
+`--p2`, `--p3`, and `--p4` options. The possible values for each controller are:
+
+ - `sensible`, the default, where buttons are mapped based on physical location
+ - `literal`, maps A to A, B to B, X to X and Y to Y.
+ - `off`, this controller will appear to be disconnected
+
+There is generally no need to turn controllers off, though some games, like
+Super Mario World, will allow two players to take turns sharing one controller
+if all others are unplugged:
+
+    ./fn22snesticle.py --p1 literal --p2 off --p3 off --p4 off --rom smw.sfc fightnight2.iso smw.iso
 
 ## Game IDs
 
@@ -145,18 +156,24 @@ understand.
 ### Choosing a game
 
 The ROM selection screen should be fairly self-explanatory. Choose a ROM by
-moving the arrow up and down, then press A or Start to run it. You can return
-to the ROM selection screen by resetting your Gamecube.
+moving the arrow up and down, then press Start to run it. If you have a long
+list, you can press right or left to move to the next or previous page
+respectively. Press Z to go to the Preferences menu. Currently the only settings
+available are the button mapping settings for the four controllers. Use the A
+button to switch between the three possible values for each controller. Press Z
+again to go back to the ROM menu. When you are in a game, you can return to the
+ROM selection menu at any time by resetting your Gamecube, but do note that you
+will lose all progress in the game you were playing (and the controller settings
+will be reset).
 
 ### Controller emulation
 
-Only controller 1 is supported for now.
+Up to four controllers are supported.
 
 SNESticle within Fight Night maps the Gamecube buttons to SNES buttons in a very
 literal way, ie A on the Gamecube controller becomes A on the SNES controller.
-This works for Super Punch-Out but is useless for most games, so unless the
-`--literal-buttons` flag is given, the script patches the code to map buttons
-based on physical locations instead:
+This works for Super Punch-Out but is useless for most games, so by default the
+script patches the code to map buttons based on physical locations instead:
 
 | GC button | SNES button |
 |-----------|-------------|
@@ -166,7 +183,6 @@ based on physical locations instead:
 | Y         | X           |
 | Start     | Start       |
 | Z         | Select      |
-
 
 ### Compatibility
 
