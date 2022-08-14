@@ -464,7 +464,9 @@ handle_btn_right_main:
     lda #0
     sep #$20
 .a8
-    jmp wait_for_vblank
+    lda cy_games
+    jmp update_chosen
+
 handle_btn_left:
     lda transition
     beq handle_btn_left_main
@@ -482,7 +484,8 @@ handle_btn_left_main:
     lda #0
     sep #$20
 .a8
-    jmp wait_for_vblank
+    lda cy_games
+    jmp update_chosen
 
 handle_btn_up:
     lda transition
@@ -597,10 +600,15 @@ update_chosen:
     asl a
     asl a
     sta spritesinram + 509      ; Move arrow
+    rep #$20
+.a16
     lda cgame
     asl a
     asl a
     tay
+    lda #0
+    sep #$20
+.a8
     lda filenames, y
     sta chosen
     lda filenames + 1, y

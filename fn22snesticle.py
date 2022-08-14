@@ -41,13 +41,13 @@ p_main = {0xdec74: [0x60000000],   # nop ; Null references
           0xe9adc: [0x480b3778],   # b 0x801a0254 ; Jump to snesticle
           0x28b560: [0x60000000,   # Placeholder for exit check
                      0x54093C2E,   # rlwinm r9, r0, 7, 16, 23
-                     0x50094CAC,   # rlwimi 9, 0, 9, 18, 22
-                     0x5009452A,   # rlwimi 9, 0, 8, 20, 21
-                     0x500904E6,   # rlwimi 9, 0, 0, 19, 19
-                     0x5009fEB6,   # rlwimi 9, 0, 31, 26, 27
-                     0x50092C62,   # rlwimi 9, 0, 5, 17, 17
-                     0x5009EE30,   # rlwimi 9, 0, 29, 24, 24
-                     0x5009DE72,   # rlwimi 9, 0, 27, 25, 25
+                     0x50094CAC,   # rlwimi r9, r0, 9, 18, 22
+                     0x5009452A,   # rlwimi r9, r0, 8, 20, 21
+                     0x500904E6,   # rlwimi r9, r0, 0, 19, 19
+                     0x5009fEB6,   # rlwimi r9, r0, 31, 26, 27
+                     0x50092C62,   # rlwimi r9, r0, 5, 17, 17
+                     0x5009EE30,   # rlwimi r9, r0, 29, 24, 24
+                     0x5009DE72,   # rlwimi r9, r0, 27, 25, 25
 
                      0x5529801E,   # rlwinm r9, r9, 16, 0, 15 ; Shift up
                      0x80030094,   # lwz r0, 0x94(r3) ; Load P2
